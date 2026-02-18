@@ -16,6 +16,8 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [selectedQty, setSelectedQty] = useState<number>(1);
 
   useEffect(() => {
     load();
@@ -31,24 +33,30 @@ export default function ShopPage() {
   }
 
   async function loadBalance() {
-    // dev: get player by email
     const res = await fetch("/api/me?email=sandro@local");
     const data = await res.json();
     const bal = data?.player?.cashCents ?? null;
     setBalance(bal);
   }
 
-  async function buy(itemId: string) {
+  function openBuyModal(item: Item) {
+    setSelectedItem(item);
+    setSelectedQty(1);
+  }
+
+  async function confirmBuy() {
+    if (!selectedItem) return;
     setMsg(null);
     try {
       const res = await fetch("/api/shop/buy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "sandro@local", itemId })
+        body: JSON.stringify({ email: "sandro@local", itemId: selectedItem.id, quantity: selectedQty })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Kauf fehlgeschlagen");
-      setMsg(`Gekauft: ${data?.message} — neue Balance: ${(data.newBalance/100).toFixed(2)} USD`);
+      if (!res.ok) { setMsg("Fehler: " + (data.error || "Kauf fehlgeschlagen")); return; }
+      setMsg(`Gekauft: ${data.message} — neue Balance: ${(data.newBalance/100).toFixed(2)} USD`);
+      setSelectedItem(null);
       await load();
       await loadBalance();
     } catch (err: any) {
@@ -73,12 +81,27 @@ export default function ShopPage() {
             </div>
             <div style={{ marginTop: 8 }}>
               <div>Preis: {(it.basePriceCents/100).toFixed(2)} USD</div>
-              <button style={{ marginTop: 8 }} onClick={() => buy(it.id)}>Kaufen</button>
+              <button style={{ marginTop: 8 }} onClick={() => openBuyModal(it)}>Kaufen</button>
             </div>
           </div>
         ))}
         {items.length === 0 && !loading && <div>keine Artikel im Shop</div>}
       </div>
+
+      {selectedItem && (
+        <div style={{ position: "fixed", left:0, top:0, right:0, bottom:0, background: "rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#fff", padding:20, borderRadius:8, minWidth:320 }}>
+            <h3>Kaufe {selectedItem.name}</h3>
+            <div>
+              Menge: <input type="number" min={1} value={selectedQty} onChange={(e)=>setSelectedQty(Number(e.target.value))} />
+            </div>
+            <div style={{ marginTop:12 }}>
+              <button onClick={confirmBuy}>Bestätigen</button>
+              <button onClick={()=>setSelectedItem(null)} style={{ marginLeft:8 }}>Abbruch</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

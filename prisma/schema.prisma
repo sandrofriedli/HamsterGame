@@ -11,6 +11,7 @@ model User {
   id        String    @id @default(uuid())
   email     String    @unique
   name      String?
+  isAdmin   Boolean   @default(false)
   createdAt DateTime  @default(now())
   player    Player?
   groups    GroupMember[]
@@ -90,7 +91,6 @@ model InventoryItem {
 
 model Transaction {
   id          String   @id @default(uuid())
-  player      Player   @relation(fields: [playerId], references: [id])
   playerId    String
   amountCents Int
   type        String

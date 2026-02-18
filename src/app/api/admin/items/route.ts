@@ -1,16 +1,33 @@
 // src/app/api/admin/items/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getServerUser } from "@/lib/getServerUser";
+import { z } from "zod";
 
 const prisma = new PrismaClient();
 
-type ItemCreate = {
-  name: string;
-  category?: string;
-  basePriceCents: number;
-  imageUrl?: string | null;
-  meta?: any;
-};
+const ItemCreateSchema = z.object({
+  name: z.string().min(1),
+  category: z.string().optional(),
+  basePriceCents: z.number().int().nonnegative(),
+  imageUrl: z.string().nullable().optional(),
+  meta: z.any().optional()
+});
+
+const ItemUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().optional(),
+  category: z.string().optional(),
+  basePriceCents: z.number().int().nonnegative().optional(),
+  imageUrl: z.string().nullable().optional(),
+  meta: z.any().optional()
+});
+
+async function requireAdmin() {
+  const { user } = await getServerUser();
+  if (!user || !user.isAdmin) return null;
+  return user;
+}
 
 export async function GET() {
   const items = await prisma.assetCatalogItem.findMany({ orderBy: { name: "asc" } });
@@ -18,47 +35,40 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = (await request.json()) as ItemCreate;
-    if (!body?.name || typeof body.basePriceCents !== "number") {
-      return NextResponse.json({ error: "name and basePriceCents required" }, { status: 400 });
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const body = await request.json();
+  const parsed = ItemCreateSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "invalid payload", issues: parsed.error.format() }, { status: 400 });
+
+  const created = await prisma.assetCatalogItem.create({
+    data: {
+      name: parsed.data.name,
+      category: parsed.data.category ?? "misc",
+      basePriceCents: Math.max(0, Math.floor(parsed.data.basePriceCents)),
+      imageUrl: parsed.data.imageUrl ?? null,
+      meta: parsed.data.meta ?? null
     }
-    const created = await prisma.assetCatalogItem.create({
-      data: {
-        name: body.name,
-        category: body.category ?? "misc",
-        basePriceCents: Math.max(0, Math.floor(body.basePriceCents)),
-        imageUrl: body.imageUrl ?? null,
-        meta: body.meta ?? null
-      }
-    });
-    return NextResponse.json({ ok: true, item: created });
-  } catch (err: any) {
-    console.error("admin/items POST", err);
-    return NextResponse.json({ error: String(err?.message ?? err) }, { status: 500 });
-  }
+  });
+  return NextResponse.json({ ok: true, item: created });
 }
 
 export async function PUT(request: Request) {
-  try {
-    const body = await request.json();
-    const id = body?.id;
-    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-    const updateData: any = {};
-    if (typeof body.name === "string") updateData.name = body.name;
-    if (typeof body.category === "string") updateData.category = body.category;
-    if (typeof body.basePriceCents === "number") updateData.basePriceCents = Math.max(0, Math.floor(body.basePriceCents));
-    if ("imageUrl" in body) updateData.imageUrl = body.imageUrl ?? null;
-    if ("meta" in body) updateData.meta = body.meta ?? null;
+  const body = await request.json();
+  const parsed = ItemUpdateSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: "invalid payload", issues: parsed.error.format() }, { status: 400 });
 
-    const updated = await prisma.assetCatalogItem.update({
-      where: { id },
-      data: updateData
-    });
-    return NextResponse.json({ ok: true, item: updated });
-  } catch (err: any) {
-    console.error("admin/items PUT", err);
-    return NextResponse.json({ error: String(err?.message ?? err) }, { status: 500 });
-  }
+  const updateData: any = {};
+  if (typeof parsed.data.name === "string") updateData.name = parsed.data.name;
+  if (typeof parsed.data.category === "string") updateData.category = parsed.data.category;
+  if (typeof parsed.data.basePriceCents === "number") updateData.basePriceCents = Math.max(0, Math.floor(parsed.data.basePriceCents));
+  if ("imageUrl" in parsed.data) updateData.imageUrl = parsed.data.imageUrl ?? null;
+  if ("meta" in parsed.data) updateData.meta = parsed.data.meta ?? null;
+
+  const updated = await prisma.assetCatalogItem.update({ where: { id: parsed.data.id }, data: updateData });
+  return NextResponse.json({ ok: true, item: updated });
 }

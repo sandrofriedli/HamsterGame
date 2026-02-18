@@ -1,72 +1,113 @@
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
-
-async function main() {
-  const group = await prisma.group.upsert({
-    where: { inviteCode: "HAMSTER-INIT" },
-    update: {},
-    create: {
-      name: "HamsterGame Testgruppe",
-      inviteCode: "HAMSTER-INIT"
-    }
-  });
-
-  const user = await prisma.user.upsert({
-    where: { email: "sandro@local" },
-    update: {},
-    create: {
-      email: "sandro@local",
-      name: "Sandro"
-    }
-  });
-
-  await prisma.player.upsert({
-    where: { userId: user.id },
-    update: {},
-    create: {
-      userId: user.id,
-      groupId: group.id,
-      job: "Banker",
-      cashCents: 5000000
-    }
-  });
-
-  await prisma.question.createMany({
-    data: [
-      {
-        category: "Allgemeinwissen",
-        difficulty: "leicht",
-        prompt: "Wie viele Kontinente gibt es?",
-        answers: JSON.stringify(["5", "6", "7", "8"]),
-        correctIndex: 2
-      },
-      {
-        category: "Autos",
-        difficulty: "mittel",
-        prompt: "Welches Unternehmen produziert den 911?",
-        answers: JSON.stringify(["Ferrari", "Porsche", "Lamborghini", "Audi"]),
-        correctIndex: 1
-      }
-    ],
-    skipDuplicates: true
-  });
-
-  await prisma.assetCatalogItem.createMany({
-    data: [
-      { name: "Porsche 911 (Beispiel)", category: "Auto", basePriceCents: 18000000 },
-      { name: "Stadtwohnung (Beispiel)", category: "Haus", basePriceCents: 35000000 }
-    ],
-    skipDuplicates: true
-  });
-
-  console.log("Seed finished");
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String?
+  isAdmin   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  player    Player?
+  groups    GroupMember[]
+}
+
+model Group {
+  id         String    @id @default(uuid())
+  name       String
+  inviteCode String    @unique
+  members    GroupMember[]
+  createdAt  DateTime  @default(now())
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  group     Group    @relation(fields: [groupId], references: [id])
+  groupId   String
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+  @@unique([userId, groupId])
+}
+
+model Player {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @unique
+  groupId      String?
+  job          String?
+  level        Int      @default(1)
+  xp           Int      @default(0)
+  cashCents    Int      @default(0)
+  heat         Int      @default(0)
+  jailedUntil  DateTime?
+  lastDailyAt  DateTime?
+  inventory    InventoryItem[]
+  ledger       Transaction[]
+}
+
+model Question {
+  id           String   @id @default(uuid())
+  category     String
+  difficulty   String
+  prompt       String
+  answers      Json
+  correctIndex Int
+  createdAt    DateTime @default(now())
+}
+
+model DailyTask {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime
+  questions Json
+  completed Boolean  @default(false)
+  reward    Int      @default(0)
+}
+
+model AssetCatalogItem {
+  id             String   @id @default(uuid())
+  name           String
+  category       String
+  basePriceCents Int
+  imageUrl       String?
+  meta           Json?
+}
+
+model InventoryItem {
+  id         String   @id @default(uuid())
+  player     Player   @relation(fields: [playerId], references: [id])
+  playerId   String
+  catalogId  String
+  acquiredAt DateTime @default(now())
+  condition  String?
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  playerId    String
+  amountCents Int
+  type        String
+  meta        Json?
+  createdAt   DateTime @default(now())
+}
+
+model Achievement {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  title     String
+  desc      String
+}
+
+model UserAchievement {
+  id            String   @id @default(uuid())
+  playerId      String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+}
