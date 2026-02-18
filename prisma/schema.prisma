@@ -91,6 +91,7 @@ model InventoryItem {
 
 model Transaction {
   id          String   @id @default(uuid())
+  player      Player   @relation(fields: [playerId], references: [id])
   playerId    String
   amountCents Int
   type        String
