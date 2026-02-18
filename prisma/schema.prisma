@@ -1,0 +1,112 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  player    Player?
+  groups    GroupMember[]
+}
+
+model Group {
+  id         String    @id @default(uuid())
+  name       String
+  inviteCode String    @unique
+  members    GroupMember[]
+  createdAt  DateTime  @default(now())
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  group     Group    @relation(fields: [groupId], references: [id])
+  groupId   String
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+  @@unique([userId, groupId])
+}
+
+model Player {
+  id           String   @id @default(uuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String   @unique
+  groupId      String?
+  job          String?
+  level        Int      @default(1)
+  xp           Int      @default(0)
+  cashCents    Int      @default(0)
+  heat         Int      @default(0)
+  jailedUntil  DateTime?
+  lastDailyAt  DateTime?
+  inventory    InventoryItem[]
+  ledger       Transaction[]
+}
+
+model Question {
+  id           String   @id @default(uuid())
+  category     String
+  difficulty   String
+  prompt       String
+  answers      Json
+  correctIndex Int
+  createdAt    DateTime @default(now())
+}
+
+model DailyTask {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime
+  questions Json
+  completed Boolean  @default(false)
+  reward    Int      @default(0)
+}
+
+model AssetCatalogItem {
+  id             String   @id @default(uuid())
+  name           String
+  category       String
+  basePriceCents Int
+  imageUrl       String?
+  meta           Json?
+}
+
+model InventoryItem {
+  id         String   @id @default(uuid())
+  player     Player   @relation(fields: [playerId], references: [id])
+  playerId   String
+  catalogId  String
+  acquiredAt DateTime @default(now())
+  condition  String?
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  playerId    String
+  amountCents Int
+  type        String
+  meta        Json?
+  createdAt   DateTime @default(now())
+}
+
+model Achievement {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  title     String
+  desc      String
+}
+
+model UserAchievement {
+  id            String   @id @default(uuid())
+  playerId      String
+  achievementId String
+  unlockedAt    DateTime @default(now())
+}
