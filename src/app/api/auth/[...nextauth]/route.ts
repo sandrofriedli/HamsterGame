@@ -14,18 +14,35 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "text" }
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
-        const email = String(credentials.email).toLowerCase();
+  if (!credentials?.email) return null;
 
-        // find or create user (dev flow)
-        let user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-          user = await prisma.user.create({
-            data: { email, name: email.split("@")[0] || email, isAdmin: false }
-          });
-        }
-        return { id: user.id, email: user.email, name: user.name, isAdmin: user.isAdmin };
+  const email = credentials.email.toLowerCase();
+
+  // Try to find existing user
+  let user = await prisma.user.findUnique({
+    where: { email }
+  });
+
+  // If not found, create user (DEV MODE)
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name: email.split("@")[0],
+        isAdmin: email === "sandro@local" // make this one admin
       }
+    });
+  }
+
+  // IMPORTANT: must return an object, not null
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    isAdmin: user.isAdmin
+  };
+}
+
     })
   ],
   session: { strategy: "jwt" },
