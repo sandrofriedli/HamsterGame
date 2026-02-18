@@ -1,6 +1,7 @@
 // src/app/api/admin/items/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getServerUser } from "@/lib/getServerUser";
 
 const prisma = new PrismaClient();
 
@@ -12,12 +13,23 @@ type ItemCreate = {
   meta?: any;
 };
 
+async function requireAdmin() {
+  const { user } = await getServerUser();
+  if (!user || !user.isAdmin) {
+    return null;
+  }
+  return user;
+}
+
 export async function GET() {
   const items = await prisma.assetCatalogItem.findMany({ orderBy: { name: "asc" } });
   return NextResponse.json({ items });
 }
 
 export async function POST(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   try {
     const body = (await request.json()) as ItemCreate;
     if (!body?.name || typeof body.basePriceCents !== "number") {
@@ -40,6 +52,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   try {
     const body = await request.json();
     const id = body?.id;
@@ -52,10 +67,7 @@ export async function PUT(request: Request) {
     if ("imageUrl" in body) updateData.imageUrl = body.imageUrl ?? null;
     if ("meta" in body) updateData.meta = body.meta ?? null;
 
-    const updated = await prisma.assetCatalogItem.update({
-      where: { id },
-      data: updateData
-    });
+    const updated = await prisma.assetCatalogItem.update({ where: { id }, data: updateData });
     return NextResponse.json({ ok: true, item: updated });
   } catch (err: any) {
     console.error("admin/items PUT", err);
